@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="uz"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stadion boshqaruvi</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f6f4;--card:#fff;--tx:#17211a;--mu:#6b786f;--ac:#1f8a4c;--acx:#fff;--bd:#dfe5e0;--rd:#d33a2c;--am:#c27a00}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111613;--card:#1b231e;--tx:#e8efe9;--mu:#92a196;--ac:#3fbf74;--acx:#07140b;--bd:#2c3730;--rd:#ff6b5c;--am:#f0b429}}
+:root[data-theme="dark"]{--bg:#111613;--card:#1b231e;--tx:#e8efe9;--mu:#92a196;--ac:#3fbf74;--acx:#07140b;--bd:#2c3730;--rd:#ff6b5c;--am:#f0b429}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:80px}
+main{max-width:640px;margin:0 auto;padding:12px}
+h2{font-size:18px;margin:16px 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;margin:3px 0 8px}
+label{font-size:13px;color:var(--mu)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+button,.btn{background:var(--ac);color:var(--acx);border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;text-align:center}
+button.s,.btn.s{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+button.r{background:var(--rd);color:#fff}
+.mu{color:var(--mu);font-size:14px}.big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--bd)}
+.soon{border-color:var(--am);box-shadow:0 0 0 1px var(--am)}
+.warn{color:var(--rd);font-size:14px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:12px 2px;font-size:13px}
+nav button.on{color:var(--ac)}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:right}td:first-child,th:first-child{text-align:left}
+.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal .card{width:100%;max-width:420px;margin:0}
+</style></head><body>
+<main id="app"></main>
+<nav id="nav"></nav>
+<div id="mod"></div>
+<script>
+var S={price:150000,wk:{},bookings:[],sessions:[],debts:[]},tab='book',KEY='stadion_v1';
+try{var raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw))}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+var $=function(i){return document.getElementById(i)};
+function pad(n){return String(n).padStart(2,'0')}
+function ds(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function today(){return ds(new Date())}
+function addDays(s,n){var d=new Date(s+'T12:00');d.setDate(d.getDate()+n);return ds(d)}
+function hm(ts){var d=new Date(ts);return pad(d.getHours())+':'+pad(d.getMinutes())}
+function money(n){return Math.round(n).toLocaleString('ru-RU')+' so‘m'}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+var DAYS=['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
+function rateFor(date){var w=S.wk[new Date(date+'T12:00').getDay()];return w>0?w:S.price}
+function tmin(t){var p=t.split(':');return +p[0]*60+ +p[1]}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function running(){return S.sessions.filter(function(x){return !x.end})}
+function sesMin(x){return Math.floor(((x.end||Date.now())-x.start)/60000)}
+function sesCost(x){return x.end?x.total:sesMin(x)*rateFor(ds(new Date(x.start)))/60}
+
+function go(t){tab=t;render()}
+function render(){
+ var T=[['book','Bronlar'],['live','O‘yin'],['debt','Qarzlar'],['rep','Hisobot'],['set','Sozlama']];
+ $('nav').innerHTML=T.map(function(t){return '<button class="'+(tab==t[0]?'on':'')+'" onclick="go(\''+t[0]+'\')">'+t[1]+(t[0]=='live'&&running().length?' ●':'')+'</button>'}).join('');
+ $('app').innerHTML=({book:vBook,live:vLive,debt:vDebt,rep:vRep,set:vSet})[tab]();
+}
+
+/* ---- Bronlar ---- */
+function vBook(){
+ var h='<button onclick="quick()" style="width:100%;font-size:18px;padding:16px">▶ Hozir kelgan mijoz — darhol boshlash</button><h2>Yangi bron</h2><div class="card"><label>Ism</label><input id="bn"><label>Telefon</label><input id="bp" type="tel" placeholder="+998...">'
+ +'<label>Sana</label><input id="bd" type="date" value="'+today()+'"><div class="row"><div><label>Boshlanishi</label><input id="bs" type="time" value="14:00"></div><div><label>Tugashi</label><input id="be" type="time" value="15:00"></div></div>'
+ +'<label>Izoh (ixtiyoriy)</label><input id="bt"><div id="bw" class="warn"></div><button onclick="addBook()" style="width:100%">Bronni yozish</button></div>';
+ var t=today(),now=new Date(),nm=now.getHours()*60+now.getMinutes();
+ var list=S.bookings.filter(function(b){return b.date>=addDays(t,-1)}).sort(function(a,b){return (a.date+a.start).localeCompare(b.date+b.start)});
+ h+='<h2>Kelgusi bronlar</h2>';
+ if(!list.length)h+='<div class="mu">Hozircha bron yo‘q</div>';
+ var last='';
+ list.forEach(function(b){
+  if(b.date!=last){last=b.date;h+='<div class="mu" style="margin:10px 0 4px">'+b.date+' · '+DAYS[new Date(b.date+'T12:00').getDay()]+(b.date==t?' · BUGUN':b.date==addDays(t,1)?' · ERTAGA':'')+'</div>'}
+  var soon=b.date==t&&!b.started&&tmin(b.start)-nm<=60&&tmin(b.start)-nm>=-30;
+  var hrs=(tmin(b.end)-tmin(b.start))/60;
+  h+='<div class="card'+(soon?' soon':'')+'"><b>'+esc(b.name)+'</b> <span class="tag">'+b.start+' – '+b.end+'</span> <span class="tag">'+hrs+' soat</span>'
+  +'<div class="mu">'+tel(b.phone)+(b.note?' · '+esc(b.note):'')+' · ≈ '+money(hrs*rateFor(b.date))+'</div>'
+  +(soon?'<div class="warn">⏰ Tez orada boshlanadi — ogohlantiring!</div>':'')
+  +'<div class="row" style="margin-top:8px"><a class="btn s" href="tel:'+esc(b.phone)+'">📞 Qo‘ng‘iroq</a>'
+  +'<button class="s" onclick="tog(\''+b.id+'\')">'+(b.called?'✓ Ogohlantirildi':'Ogohlantirilmadi')+'</button></div>'
+  +'<div class="row" style="margin-top:8px">'+(b.date==t&&!b.started?'<button onclick="startBook(\''+b.id+'\')">▶ Boshlash</button>':'')
+  +'<button class="s" onclick="delBook(\''+b.id+'\')">O‘chirish</button></div></div>';
+ });
+ return h;
+}
+function addBook(){
+ var b={id:uid(),name:$('bn').value.trim(),phone:$('bp').value.trim(),date:$('bd').value,start:$('bs').value,end:$('be').value,note:$('bt').value.trim()};
+ if(!b.name||!b.phone||!b.date||!b.start||!b.end){$('bw').textContent='Ism, telefon, sana va vaqtni to‘ldiring';return}
+ if(tmin(b.end)<=tmin(b.start)){$('bw').textContent='Tugash vaqti boshlanishdan keyin bo‘lsin';return}
+ var c=S.bookings.filter(function(o){return o.date==b.date&&tmin(b.start)<tmin(o.end)&&tmin(o.start)<tmin(b.end)})[0];
+ if(c&&!confirm('Bu vaqt band: '+c.name+' ('+c.start+'–'+c.end+'). Baribir yozaymi?'))return;
+ S.bookings.push(b);save();render();
+}
+function tog(id){var b=S.bookings.filter(function(x){return x.id==id})[0];b.called=!b.called;save();render()}
+function delBook(id){if(confirm('Bronni o‘chiraymi?')){S.bookings=S.bookings.filter(function(x){return x.id!=id});save();render()}}
+function startBook(id){var b=S.bookings.filter(function(x){return x.id==id})[0];b.started=true;S.sessions.push({id:uid(),name:b.name,phone:b.phone,start:Date.now(),end:null});save();tab='live';render()}
+
+/* ---- O'yin ---- */
+function vLive(){
+ var r=running(),h='<button onclick="quick()" style="width:100%;font-size:20px;padding:18px">▶ Yangi o‘yinni boshlash</button><div class="mu" style="margin:4px 0 0">Ism va telefon so‘ralmaydi</div><h2>Hozir o‘ynayotganlar</h2>';
+ if(!r.length)h+='<div class="mu">Hozir o‘yin yo‘q</div>';
+ r.forEach(function(x){
+  h+='<div class="card"><b>'+esc(x.name||'Kelgan mijoz')+'</b> <span class="mu">'+tel(x.phone)+'</span><div class="mu">Boshlandi: '+hm(x.start)+' · narx: '+money(rateFor(ds(new Date(x.start))))+'/soat</div>'
+  +'<div class="big" data-m="'+x.id+'"></div><div class="mu" data-c="'+x.id+'"></div><button class="r" style="width:100%;margin-top:8px" onclick="stopS(\''+x.id+'\')">■ Tugatish</button></div>';
+ });
+ 
+ return h;
+}
+function tick(){
+ if(tab!='live')return;
+ running().forEach(function(x){
+  var m=$('app').querySelector('[data-m="'+x.id+'"]'),c=$('app').querySelector('[data-c="'+x.id+'"]');
+  if(m){var mm=sesMin(x);m.textContent=mm+' daqiqa';c.textContent=(Math.floor(mm/60))+' soat '+(mm%60)+' daq · '+money(sesCost(x))}
+ });
+}
+setInterval(tick,1000);
+var curDay=today();
+function roll(){if(today()!=curDay){if(repDate==curDay)repDate=today();curDay=today();render()}}
+setInterval(roll,30000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)roll()});
+function tel(p){return p?'<a href="tel:'+esc(p)+'" style="color:var(--ac);font-weight:600">'+esc(p)+'</a>':''}
+function bkOut(){var t=JSON.stringify(S);$('bk').value=t;try{navigator.clipboard.writeText(t)}catch(e){}$('bk').select()}
+function bkIn(){try{var o=JSON.parse($('bk').value);if(!o.sessions)throw 0;S=Object.assign({price:150000,wk:{},bookings:[],sessions:[],debts:[]},o);save();render();alert('Tiklandi')}catch(e){alert('Matn noto‘g‘ri')}}
+function quick(){S.sessions.push({id:uid(),name:'',phone:'',start:Date.now(),end:null});save();tab='live';render();tick()}
+function stopS(id){
+ var x=S.sessions.filter(function(s){return s.id==id})[0];
+ x.end=Date.now();x.rate=rateFor(ds(new Date(x.start)));x.total=Math.round(sesMin(x)*x.rate/60);
+ $('mod').innerHTML='<div class="modal"><div class="card"><b>'+esc(x.name||'Nomsiz')+'</b><div class="mu">'+hm(x.start)+' – '+hm(x.end)+' · '+sesMin(x)+' daqiqa</div>'
+ +'<div class="big">'+money(x.total)+'</div><label>Ism (faqat qarz bo‘lsa kerak)</label><input id="fn" value="'+esc(x.name)+'"><label>Telefon</label><input id="fp" value="'+esc(x.phone)+'">'
+ +'<label>Hozir to‘langan summa</label><input id="fa" type="number" value="'+x.total+'"><div class="mu">Qolgani qarzga yoziladi</div><div id="fw" class="warn"></div>'
+ +'<div class="row"><button onclick="fin(\''+id+'\')">Saqlash</button><button class="s" onclick="resume(\''+id+'\')">Bekor</button></div></div></div>';
+}
+function resume(id){var x=S.sessions.filter(function(s){return s.id==id})[0];x.end=null;delete x.total;$('mod').innerHTML='';render()}
+function fin(id){
+ var x=S.sessions.filter(function(s){return s.id==id})[0],paid=Math.max(0,Math.min(+$('fa').value||0,x.total)),d=x.total-paid;
+ x.name=$('fn').value.trim();x.phone=$('fp').value.trim();
+ if(d>0&&(!x.name||!x.phone)){$('fw').textContent='Qarz yozish uchun ism va telefon kerak';return}
+ x.paid=paid;x.debt=d;
+ if(d>0)S.debts.push({id:uid(),name:x.name,phone:x.phone,amount:d,paid:0,date:today(),from:hm(x.start)+'–'+hm(x.end)});
+ save();$('mod').innerHTML='';tab='debt';if(d<=0)tab='live';render();
+}
+
+/* ---- Qarzlar ---- */
+function vDebt(){
+ var open=S.debts.filter(function(d){return d.amount-d.paid>0}),sum=open.reduce(function(a,d){return a+d.amount-d.paid},0);
+ var h='<h2>Qarzlar</h2><div class="card"><div class="mu">Jami qarz</div><div class="big" style="color:var(--rd)">'+money(sum)+'</div></div>';
+ h+='<div class="card"><b>Qarz qo‘shish</b><label>Ism</label><input id="dn"><label>Telefon</label><input id="dp" type="tel"><label>Summa</label><input id="da" type="number"><button onclick="addDebt()" style="width:100%">Qarzga yozish</button></div>';
+ var g={};open.forEach(function(d){var k=d.phone+'|'+d.name;(g[k]=g[k]||[]).push(d)});
+ Object.keys(g).forEach(function(k){
+  var a=g[k],t=a.reduce(function(s,d){return s+d.amount-d.paid},0);
+  h+='<div class="card"><b>'+esc(a[0].name)+'</b> <span class="mu">'+tel(a[0].phone)+'</span><div class="big" style="font-size:24px;color:var(--rd)">'+money(t)+'</div>';
+  a.forEach(function(d){h+='<div class="mu">'+d.date+(d.from?' · '+d.from:'')+' — '+money(d.amount-d.paid)+'</div>'});
+  h+='<div class="row" style="margin-top:8px"><a class="btn s" href="tel:'+esc(a[0].phone)+'">📞</a><button onclick="payDebt(\''+a[0].id+'\')">To‘lov qabul qilish</button></div></div>';
+ });
+ return h;
+}
+function addDebt(){var n=$('dn').value.trim(),p=$('dp').value.trim(),a=+$('da').value;if(!n||!p||!(a>0))return alert('Ism, telefon va summani kiriting');S.debts.push({id:uid(),name:n,phone:p,amount:a,paid:0,date:today()});save();render()}
+function payDebt(id){
+ var f=S.debts.filter(function(d){return d.id==id})[0],list=S.debts.filter(function(d){return d.phone==f.phone&&d.name==f.name&&d.amount-d.paid>0}),t=list.reduce(function(s,d){return s+d.amount-d.paid},0);
+ var v=prompt(f.name+' qarzi: '+money(t)+'\nQancha to‘ladi?',t);if(v==null)return;var p=Math.min(+v||0,t);
+ list.forEach(function(d){var r=Math.min(p,d.amount-d.paid);d.paid+=r;p-=r});save();render();
+}
+
+/* ---- Hisobot ---- */
+var repDate=today();
+function dayStat(date){
+ var L=S.sessions.filter(function(x){return x.end&&ds(new Date(x.start))==date});
+ var m=L.reduce(function(a,x){return a+sesMin(x)},0),tot=L.reduce(function(a,x){return a+x.total},0),paid=L.reduce(function(a,x){return a+(x.paid||0)},0);
+ return{L:L,m:m,tot:tot,paid:paid,debt:tot-paid};
+}
+function hhmm(m){return Math.floor(m/60)+' s '+(m%60)+' d'}
+function vRep(){
+ var s=dayStat(repDate),h='<h2>Kunlik hisobot</h2><div class="card"><input id="rd" type="date" value="'+repDate+'" onchange="repDate=this.value;render()">'
+ +'<table><tr><td>Stadion ishlagan vaqt</td><td><b>'+hhmm(s.m)+'</b></td></tr><tr><td>O‘yinlar soni</td><td>'+s.L.length+'</td></tr><tr><td>Jami hisob</td><td><b>'+money(s.tot)+'</b></td></tr><tr><td>To‘langan</td><td>'+money(s.paid)+'</td></tr><tr><td>Qarz</td><td style="color:var(--rd)">'+money(s.debt)+'</td></tr></table></div>';
+ s.L.forEach(function(x){h+='<div class="card"><b>'+esc(x.name||'Nomsiz')+'</b> <span class="mu">'+tel(x.phone)+'</span><div class="mu">'+hm(x.start)+' – '+hm(x.end)+' · '+sesMin(x)+' daq · '+money(x.total)+(x.debt?' · <span class="warn">qarz '+money(x.debt)+'</span>':'')+'</div></div>'});
+ h+='<h2>Oxirgi 7 kun</h2><div class="card" style="overflow-x:auto"><table><tr><th>Kun</th><th>Vaqt</th><th>Hisob</th><th>Qarz</th></tr>';
+ var T=0,M=0,D=0;
+ for(var i=6;i>=0;i--){var d=addDays(today(),-i),q=dayStat(d);T+=q.tot;M+=q.m;D+=q.debt;h+='<tr><td>'+d.slice(5)+' '+DAYS[new Date(d+'T12:00').getDay()].slice(0,3)+'</td><td>'+hhmm(q.m)+'</td><td>'+money(q.tot)+'</td><td>'+(q.debt?money(q.debt):'—')+'</td></tr>'}
+ h+='<tr><td><b>Jami</b></td><td><b>'+hhmm(M)+'</b></td><td><b>'+money(T)+'</b></td><td>'+money(D)+'</td></tr></table></div>';
+ var set={};S.sessions.forEach(function(x){if(x.end)set[ds(new Date(x.start))]=1});
+ h+='<h2>Kunlar arxivi (saqlanib boradi)</h2><div class="card" style="overflow-x:auto"><table><tr><th>Sana</th><th>Vaqt</th><th>Hisob</th></tr>';
+ Object.keys(set).sort().reverse().forEach(function(d){var q=dayStat(d);h+='<tr onclick="repDate=\''+d+'\';render();scrollTo(0,0)" style="cursor:pointer"><td>'+d+'</td><td>'+hhmm(q.m)+'</td><td>'+money(q.tot)+'</td></tr>'});
+ return h+'</table></div>';
+}
+
+/* ---- Sozlama ---- */
+function vSet(){
+ var h='<h2>Narx sozlamalari</h2><div class="card"><label>Asosiy narx (1 soat, so‘m)</label><input id="sp" type="number" value="'+S.price+'">'
+ +'<div class="mu" style="margin-bottom:8px">Hafta kunlari bo‘yicha alohida narx (bo‘sh qoldirsangiz asosiy narx olinadi)</div>';
+ [1,2,3,4,5,6,0].forEach(function(i){h+='<label>'+DAYS[i]+'</label><input id="w'+i+'" type="number" placeholder="'+S.price+'" value="'+(S.wk[i]||'')+'">'});
+ return h+'<button onclick="saveSet()" style="width:100%">Saqlash</button><p class="mu">Narx o‘zgarsa, davom etayotgan o‘yinlarning daqiqali hisobi ham yangi narx bo‘yicha qayta hisoblanadi. Tugagan o‘yinlar eski narxda qoladi.</p></div>'
+ +'<div class="card"><b>Zaxira nusxa</b><div class="mu">Hamma ma’lumotni matn qilib saqlab qo‘ying. Kerak bo‘lsa shu yerga qo‘yib tiklaysiz.</div><textarea id="bk" rows="4"></textarea><div class="row"><button onclick="bkOut()">Nusxa olish</button><button class="s" onclick="bkIn()">Tiklash</button></div></div>'
+ +'<div class="card"><button class="r" onclick="if(confirm(\'Barcha ma’lumotlar o‘chadi. Davom etamizmi?\')){S={price:150000,wk:{},bookings:[],sessions:[],debts:[]};save();render()}">Hammasini tozalash</button></div>';
+}
+function saveSet(){var p=+$('sp').value;if(!(p>0))return alert('Narxni kiriting');S.price=p;S.wk={};for(var i=0;i<7;i++){var v=+$('w'+i).value;if(v>0)S.wk[i]=v}save();alert('Saqlandi');render()}
+render();
+</script></body></html>
